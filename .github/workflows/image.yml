@@ -1,5 +1,6 @@
-name: Test and publish image
+name: Publish container image
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     tags: ['v*']
@@ -16,7 +17,8 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m pytest -q
-  image:
+  publish:
+    name: Publish image
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -40,10 +42,32 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
-            type=sha
+            type=sha,format=long
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Publish summary
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          image = os.environ['IMAGE'] + ':sha-' + os.environ['GITHUB_SHA']
+          summary = '\n'.join([
+              '## Image for TrueNAS Apps',
+              '',
+              f'`{image}`',
+              '',
+              'Use this specific image tag in `deploy/truenas.yaml`.',
+              '',
+              f'Pull command: `docker pull {image}`',
+              '',
+          ])
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as output:
+              output.write(summary)
+          PY

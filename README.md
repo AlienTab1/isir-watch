@@ -153,7 +153,7 @@ must be writable by UID 10001.
 The `.github/workflows/image.yml` workflow runs tests and builds the image.
 Pushes to `main` publish `ghcr.io/<owner>/<repository>:latest`; tags matching
 `v*` publish a corresponding version tag. Pull requests build the image without
-publishing it. Make the GHCR package public to allow anonymous image pulls.
+publishing it. You can also start a publish run from **Actions → Publish container image → Run workflow**. After a successful publish, the job summary shows the exact commit image tag to use in `deploy/truenas.yaml`. Make the GHCR package public to allow anonymous image pulls.
 
 `deploy/truenas.yaml` provides Compose YAML for TrueNAS releases using Docker
 Apps (24.10 and later). Replace the image placeholder with the published GHCR
