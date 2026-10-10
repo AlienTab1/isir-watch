@@ -1,0 +1,6 @@
+<!doctype html><html lang="cs"><meta charset="utf-8"><body style="font-family:Arial,sans-serif;color:#172e37;max-width:800px;margin:auto"><h1>ISIR Watch</h1><p>Přehled sledovaných subjektů</p>
+{% for row in rows %}<section style="border:1px solid #ddd;padding:16px;margin:16px 0"><h2>{{ row.subject.nazev or row.subject.ic }} {{ row.subject.jmeno }}</h2><p>IČO: {{ row.subject.ic or '—' }} · Datum narození: {{ row.subject.datum_narozeni or '—' }}</p>
+<p>Poslední kontrola: {{ row.result.checked_at if row.result else 'Zatím neprovedena' }}</p>
+{% if row.result and row.result.error %}<p style="color:#ac2222">Kontrola selhala: {{ row.result.error }}</p>{% elif row.result %}<p>Nálezy: {{ row.count }}</p>{% endif %}
+{% if row.truncated %}<p>Dotaz dosáhl limitu 50 výsledků. Přehled může být neúplný.</p>{% endif %}
+{% include 'hits.html' %}</section>{% else %}<p>Žádné sledované subjekty.</p>{% endfor %}</body></html>

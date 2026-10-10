@@ -1,0 +1,19 @@
+# Replace YOUR_GITHUB_OWNER after publishing the image to GHCR.
+# Internal database is intentionally ephemeral on container recreation.
+services:
+  app:
+    image: ghcr.io/YOUR_GITHUB_OWNER/isir-watch:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      TZ: Europe/Prague
+      ISIR_DB_PATH: /data/isir-watch.db
+      ISIR_SCHEDULER_ENABLED: "true"
+      ISIR_SMTP_HOST: smtp.gmail.com
+      ISIR_SMTP_PORT: "587"
+      ISIR_SMTP_USER: ""
+      ISIR_SMTP_PASS: ""
+      ISIR_MAIL_FROM: "ISIR Watch <email@example.com>"
+      ISIR_MAIL_SUBJECT: "ISIR Watch – týdenní přehled"
+    stop_grace_period: 35s

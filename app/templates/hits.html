@@ -1,0 +1,7 @@
+{% for hit in row.hits %}
+<div class="hit" style="padding:12px;border-left:3px solid #338c77;margin:12px 0">
+<strong>Nález {{ loop.index }}</strong>
+<dl>{% for key,label in [('spis','Spisová značka'),('jmeno','Jméno/název'),('ico','IČO'),('rc','Rodné číslo'),('narozeni','Datum narození'),('adresa','Sídlo / adresa'),('stav','Stav řízení')] %}
+<dt style="color:#52616b">{{ label }}</dt><dd style="margin:0 0 8px">{{ hit[key] or '—' }}</dd>{% endfor %}</dl>
+{% if hit.detail_url %}<a href="{{ hit.detail_url }}" target="_blank" rel="noopener noreferrer">Detail v ISIR →</a>{% endif %}
+</div>{% endfor %}

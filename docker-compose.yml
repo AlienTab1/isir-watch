@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    env_file:
+      - .env
+    stop_grace_period: 35s

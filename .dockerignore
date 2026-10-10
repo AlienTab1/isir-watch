@@ -1,0 +1,9 @@
+.git
+.venv
+.env
+data
+tests
+__pycache__
+.pytest_cache
+isir.wsdl
+isir.xsd
