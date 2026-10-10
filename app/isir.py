@@ -1,4 +1,5 @@
 import os
+import re
 import unicodedata
 from datetime import date, datetime
 from urllib.parse import urlparse
@@ -12,6 +13,15 @@ WSDL = 'https://isir.justice.cz:8443/isir_cuzk_ws/IsirWsCuzkService?wsdl'
 
 def norm(value):
     return ' '.join(unicodedata.normalize('NFC', str(value or '')).casefold().split())
+
+def normalize_rc(value):
+    return str(value or '').strip().replace('/', '')
+
+def validate_rc(value):
+    text = str(value or '').strip()
+    if not re.fullmatch(r'[0-9]{6}/?[0-9]{3,4}', text):
+        raise ValueError('Rodné číslo musí mít 9 nebo 10 číslic, případně s lomítkem za šestou číslicí')
+    return normalize_rc(text)
 
 def dob(value):
     if isinstance(value, (date, datetime)):
@@ -66,6 +76,9 @@ def filter_hits_strict(hits, subject):
             # Missing IČO cannot establish identity: reject conservatively.
             if str(pick(h,'ic','ico','IC')).strip().zfill(8) != subject['ic']:
                 continue
+        elif subject.get('rc'):
+            if normalize_rc(pick(h,'rc','rodneCislo')) != normalize_rc(subject['rc']):
+                continue
         else:
             if subject.get('nazev') and norm(pick(h,'nazevOsoby','prijmeni','nazev')) != norm(subject['nazev']):
                 continue
@@ -106,11 +119,13 @@ def query(subject):
     try:
         client = Client(os.getenv('ISIR_WSDL',WSDL),transport=Transport(session=session,timeout=25,operation_timeout=25))
         payload = dict(filtrAktualniRizeni='T',vyhledatBezDiakritiky='T',vyhledatPresnouShoduJmen='F',maxPocetVysledku=50,maxRelevanceVysledku=7)
-        for key, remote in (('ic','ic'),('nazev','nazevOsoby'),('jmeno','jmeno'),('datum_narozeni','datumNarozeni')):
+        for key, remote in (('ic','ic'),('rc','rc'),('nazev','nazevOsoby'),('jmeno','jmeno'),('datum_narozeni','datumNarozeni')):
             if subject.get('ic') and key != 'ic':
                 continue
+            if not subject.get('ic') and subject.get('rc') and key != 'rc':
+                continue
             if subject.get(key):
-                payload[remote] = subject[key]
+                payload[remote] = normalize_rc(subject[key]) if key == 'rc' else subject[key]
         return helpers.serialize_object(client.service.getIsirWsCuzkData(**payload),target_cls=dict)
     finally:
         session.close()

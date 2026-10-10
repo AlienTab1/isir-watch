@@ -43,7 +43,7 @@ retained for later reprocessing, while displayed counts reflect filtered matches
 
 ## Features
 
-- Monitor companies by Czech business identification number (IČO) and individuals by surname, first name, and date of birth.
+- Monitor companies by Czech business identification number (IČO) and individuals by birth number (rodné číslo), or surname, first name, and date of birth.
 - Check individual subjects through the web interface or all subjects through the CLI.
 - Apply strict local filtering to reduce false matches between similar names.
 - View the latest checks, matching proceedings, and service errors.
@@ -122,12 +122,28 @@ normalized using Unicode NFC, whitespace trimming, and case normalization;
 accents remain significant. Dates of birth and business identification numbers
 are normalized before comparison.
 
+Birth numbers accept 9 or 10 digits, with an optional slash after the first six
+digits. They are stored as text without the slash. A birth-number search sends
+only `rc` to SOAP and requires an exact local match; missing birth numbers are
+excluded. Names and dates entered alongside a birth number are descriptive.
+Existing individuals can have their birth number added or cleared in place.
+
 For subjects identified by IČO, results without an IČO are conservatively
 excluded; the stored company name is a display label. Queries reaching the
 50-result limit are marked as potentially incomplete.
 
 Raw SOAP responses are retained. The web interface and email digest use the
 same filtering function and display the number of filtered matches.
+
+## Database upgrades
+
+On startup, existing databases are upgraded automatically by adding the `rc`
+column to `subjects`. Subjects, their IDs, stored results, recipients, and scheduler
+settings are preserved. Before this migration, a SQLite backup is saved next to
+the database as `isir-watch.db.pre-rc.db` (if it does not already exist).
+Keep the same `/data` mount when updating the container image.
+After adding a birth number to an existing subject, run a new check to refresh
+results using the new identifier.
 
 ## Backup and restore
 

@@ -36,15 +36,28 @@ def initialize():
           created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         ''')
+        columns = {row['name'] for row in con.execute('PRAGMA table_info(subjects)')}
+        if 'rc' not in columns:
+            backup_path = Path(db_path()).with_name(Path(db_path()).name + '.pre-rc.db')
+            if not backup_path.exists():
+                with sqlite3.connect(backup_path) as backup:
+                    con.backup(backup)
+                logging.getLogger(__name__).info('Database backup created before rc migration')
+            con.execute("ALTER TABLE subjects ADD COLUMN rc TEXT NOT NULL DEFAULT ''")
+            logging.getLogger(__name__).info('Database migrated: added subjects.rc')
 
 def subjects():
     with connection() as con:
         return [dict(r) for r in con.execute('SELECT * FROM subjects ORDER BY id')]
 
-def add_subject(ic='', nazev='', jmeno='', datum_narozeni=''):
+def add_subject(ic='', nazev='', jmeno='', datum_narozeni='', rc=''):
     with connection() as con:
-        return con.execute('INSERT INTO subjects(ic,nazev,jmeno,datum_narozeni,created_at) VALUES(?,?,?,?,?)',
-                           (ic,nazev,jmeno,datum_narozeni,now().isoformat())).lastrowid
+        return con.execute('INSERT INTO subjects(ic,nazev,jmeno,datum_narozeni,created_at,rc) VALUES(?,?,?,?,?,?)',
+                           (ic,nazev,jmeno,datum_narozeni,now().isoformat(),rc)).lastrowid
+
+def update_rc(subject_id, rc):
+    with connection() as con:
+        return con.execute("UPDATE subjects SET rc=? WHERE id=? AND (ic IS NULL OR ic='')", (rc, subject_id)).rowcount
 
 def delete_subject(subject_id):
     with connection() as con:

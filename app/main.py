@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from . import models
+from .isir import validate_rc
 from .service import views, check_subject, check_lock
 
 log = logging.getLogger(__name__)
@@ -52,17 +53,33 @@ def health():
     return {'status':'ok'}
 
 @app.post('/subjects')
-def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_narozeni: str=Form('')):
+def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_narozeni: str=Form(''),rc: str=Form('')):
     ic,nazev,jmeno,datum_narozeni = (v.strip() for v in (ic,nazev,jmeno,datum_narozeni))
+    rc = rc.strip()
+    if ic and rc:
+        raise HTTPException(400,'Vyplňte buď IČO, nebo rodné číslo')
+    if rc:
+        try:
+            rc = validate_rc(rc)
+        except ValueError as exc:
+            raise HTTPException(400,str(exc))
     if max(map(len,(nazev,jmeno))) > 200:
         raise HTTPException(400,'Jméno je příliš dlouhé')
     if ic:
         if not re.fullmatch(r'[0-9]{8}',ic):
             raise HTTPException(400,'IČO musí mít 8 číslic')
         jmeno = datum_narozeni = ''
-    else:
+    elif not rc:
         if not all((nazev,jmeno,datum_narozeni)):
-            raise HTTPException(400,'Vyplňte IČO nebo příjmení, jméno a datum narození')
+            raise HTTPException(400,'Vyplňte IČO, rodné číslo nebo příjmení, jméno a datum narození')
+        try:
+            parsed = date.fromisoformat(datum_narozeni)
+            if parsed > date.today():
+                raise ValueError()
+            datum_narozeni = parsed.isoformat()
+        except ValueError:
+            raise HTTPException(400,'Neplatné datum narození')
+    if rc and datum_narozeni:
         try:
             parsed = date.fromisoformat(datum_narozeni)
             if parsed > date.today():
@@ -71,8 +88,19 @@ def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_n
         except ValueError:
             raise HTTPException(400,'Neplatné datum narození')
     with check_lock:
-        if not any(all(s[k] == v for k,v in (('ic',ic),('nazev',nazev),('jmeno',jmeno),('datum_narozeni',datum_narozeni))) for s in models.subjects()):
-            models.add_subject(ic,nazev,jmeno,datum_narozeni)
+        if not any(all(s[k] == v for k,v in (('ic',ic),('nazev',nazev),('jmeno',jmeno),('datum_narozeni',datum_narozeni),('rc',rc))) for s in models.subjects()):
+            models.add_subject(ic,nazev,jmeno,datum_narozeni,rc)
+    return redirect()
+
+@app.post('/subjects/{subject_id}/rc')
+def update_rc(subject_id: int, rc: str=Form('')):
+    try:
+        rc = validate_rc(rc) if rc.strip() else ''
+    except ValueError as exc:
+        raise HTTPException(400,str(exc))
+    with check_lock:
+        if not models.update_rc(subject_id,rc):
+            raise HTTPException(404,'Fyzická osoba neexistuje')
     return redirect()
 
 @app.post('/subjects/{subject_id}/check')
