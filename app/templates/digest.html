@@ -3,4 +3,4 @@
 <p>Poslední kontrola: {{ row.result.checked_at if row.result else 'Zatím neprovedena' }}</p>
 {% if row.result and row.result.error %}<p style="color:#ac2222">Kontrola selhala: {{ row.result.error }}</p>{% elif row.result %}<p>Nálezy: {{ row.count }}</p>{% endif %}
 {% if row.truncated %}<p>Dotaz dosáhl limitu 50 výsledků. Přehled může být neúplný.</p>{% endif %}
-{% include 'hits.html' %}</section>{% else %}<p>Žádné sledované subjekty.</p>{% endfor %}</body></html>
+{% include 'hits.html' %}{% set email_mode = true %}{% include 'changes.html' %}</section>{% else %}<p>Žádné sledované subjekty.</p>{% endfor %}</body></html>

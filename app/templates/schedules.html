@@ -1,0 +1,12 @@
+<section id="schedules"><h2>Plánování</h2><p>Kontroly a e-maily mají samostatné plány. Časová zóna: <strong>{{ timezone }}</strong>. Při shodném termínu proběhne nejdříve kontrola.</p>
+<div class="schedule-grid">{% for job,config in schedules.items() %}<form method="post" action="/schedules/{{ job }}" class="schedule-card">
+<h3>{{ 'Kontroly ISIR' if job == 'check' else 'E-mailový přehled' }}</h3>
+<label class="check-label"><input type="checkbox" name="enabled" value="true" {% if config.enabled %}checked{% endif %}> Zapnuto</label>
+<label>Frekvence<select name="frequency">{% for value,label in [('daily','Každý den'),('weekly','Vybrané dny týdne'),('monthly','Jednou měsíčně')] %}<option value="{{ value }}" {% if config.frequency==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>Čas<input type="time" name="time" value="{{ config.time }}" required></label>
+<fieldset><legend>Dny pro týdenní plán</legend><div class="weekday-options">{% for day,label in [(0,'Po'),(1,'Út'),(2,'St'),(3,'Čt'),(4,'Pá'),(5,'So'),(6,'Ne')] %}<label class="check-label"><input type="checkbox" name="weekdays" value="{{ day }}" {% if day in config.weekdays %}checked{% endif %}>{{ label }}</label>{% endfor %}</div></fieldset>
+<label>Den pro měsíční plán<input type="number" name="month_day" value="{{ config.month_day }}" min="1" max="31" required></label><small>Pokud den v měsíci chybí, použije se poslední den měsíce.</small>
+{% if job=='digest' %}<label class="check-label"><input type="checkbox" name="only_changes" value="true" {% if config.only_changes %}checked{% endif %}> Odeslat jen při nových změnách od posledního úspěšného přehledu</label>{% endif %}
+<button>Uložit plán</button><p role="status">{{ statuses[job] or 'Zatím bez automatického spuštění' }}</p></form>{% endfor %}</div>
+<div class="actions"><form method="post" action="/check-all"><button>Zkontrolovat všechny nyní</button></form><form method="post" action="/digest"><button class="secondary">Odeslat přehled nyní</button></form></div>
+<p>Ruční přehled se odešle i bez nových změn. Uložený plán se použije od příštího termínu. Chybný běh se automaticky neopakuje.</p></section>

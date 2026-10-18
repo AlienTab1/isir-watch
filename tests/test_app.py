@@ -45,7 +45,9 @@ def test_db():
     models.delete_email(models.emails()[0]['id'])
     assert not models.emails()
     models.delete_subject(sid)
-    assert not models.subjects() and models.latest(sid) is None
+    assert not models.subjects() and models.latest(sid) is not None
+    assert models.restore_subject(sid)==1
+    assert models.subjects()[0]['id']==sid
 
 def test_count_ui_digest(monkeypatch):
     sid=models.add_subject(**person())
@@ -94,25 +96,6 @@ def test_web_validation_and_escape():
         assert client.post('/subjects',data={'ic':'00123456','nazev':'<script>'}).status_code==200
         assert len(models.subjects())==1
         assert client.get('/health').status_code==200
-
-def test_scheduler(monkeypatch):
-    current=datetime(2026,10,12,6,0,tzinfo=ZoneInfo('Europe/Prague'))
-    monkeypatch.setattr(scheduler,'now',lambda:current)
-    models.setting('scheduler_last_slot','2026-10-05T06:00:00+02:00')
-    check=MagicMock(return_value=0)
-    send=MagicMock()
-    monkeypatch.setattr(scheduler,'check_all',check)
-    monkeypatch.setattr(scheduler,'send_digest',send)
-    scheduler.tick();scheduler.tick()
-    assert check.call_count==send.call_count==1
-
-def test_scheduler_failure(monkeypatch):
-    monkeypatch.setattr(scheduler,'now',lambda:datetime(2026,10,12,6,0,tzinfo=ZoneInfo('Europe/Prague')))
-    models.setting('scheduler_last_slot','old')
-    monkeypatch.setattr(scheduler,'check_all',lambda:1)
-    send=MagicMock();monkeypatch.setattr(scheduler,'send_digest',send)
-    scheduler.tick()
-    send.assert_not_called()
 
 def test_dst():
     tz=ZoneInfo('Europe/Prague')

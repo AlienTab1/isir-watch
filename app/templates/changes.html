@@ -1,0 +1,13 @@
+<div class="change-history" style="margin-top:20px;border-top:1px solid #dbe5e8;padding-top:12px">
+<h4>Historie změn</h4>
+<p>{% for days,events in row.changes.items() %}<span class="badge" style="display:inline-block;margin:3px;padding:4px 8px;background:#e7f1ee">{{ days }} dní: {{ events|length }} změn</span> {% endfor %}</p>
+<p style="color:#52616b;font-size:13px">Čas označuje zjištění změny. První úplná kontrola je výchozí stav; chyba ani neúplný dotaz neznamenají zmizení řízení.</p>
+{% for days,events in row.changes.items() %}
+{% if email_mode %}<div><h4>Posledních {{ days }} dní ({{ events|length }})</h4>{% else %}<details><summary>Posledních {{ days }} dní · {{ events|length }} změn</summary>{% endif %}
+{% for event in events %}<article class="change-event" style="padding:12px;margin:8px 0;border-left:3px solid #cb9337;background:#fffaf0">
+<strong>{{ event.kind_label }}</strong> · {{ event.case_label }}<br><small>{{ event.detected_at }}</small>
+<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th align="left">Údaj</th><th align="left">Předtím</th><th align="left">Nyní</th></tr></thead><tbody>
+{% for field in event.fields %}<tr><td style="padding:4px">{{ field.label }}</td><td style="padding:4px">{{ field.before or '—' }}</td><td style="padding:4px">{{ field.after or '—' }}</td></tr>{% endfor %}
+</tbody></table></article>{% else %}<p>V tomto období nebyly zjištěny žádné změny.</p>{% endfor %}
+{% if email_mode %}</div>{% else %}</details>{% endif %}
+{% endfor %}</div>

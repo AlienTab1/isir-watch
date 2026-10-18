@@ -11,7 +11,7 @@
 
 ISIR Watch is a standalone web application for monitoring individuals and
 companies in the Czech Insolvency Register (ISIR). Manage monitored subjects,
-check their current insolvency proceedings, and receive scheduled email summaries.
+check their current insolvency proceedings, and receive scheduled email summaries with rolling change history.
 Data is retrieved from the public Justice.cz SOAP service.
 
 
@@ -25,13 +25,13 @@ The web interface and email templates are currently in Czech. This documentation
 flowchart LR
     Justice[Justice.cz ISIR SOAP] -->|Broad search results| Filter[Strict local matching]
     subgraph Container[Standalone Docker container]
-        Scheduler[Monday scheduler] --> Check[Subject checks]
+        Scheduler[Independent check and email schedules] --> Check[Subject checks]
         Check -->|SOAP query| Justice
         Check -->|Raw responses| DB[(SQLite)]
         DB --> Filter
         Filter --> Web[Web dashboard]
         Filter --> Digest[HTML email digest]
-        Scheduler -->|After successful checks| Digest
+        Scheduler -->|Email schedule| Digest
     end
     Web --> Browser[Browser]
     Digest --> SMTP[SMTP server]
@@ -48,7 +48,9 @@ retained for later reprocessing, while displayed counts reflect filtered matches
 - Apply strict local filtering to reduce false matches between similar names.
 - View the latest checks, matching proceedings, and service errors.
 - Manage email recipients and send HTML digests.
-- Run automatic Monday checks followed by an email summary.
+- Configure independent daily, weekly, or monthly schedules for checks and email.
+- Review detected changes over rolling 7, 30, and 60-day windows.
+- Recover accidentally deleted subjects and their history from the trash.
 - Deploy as a standalone Docker container or a TrueNAS custom app using Compose YAML.
 
 ## Architecture and storage
@@ -83,7 +85,8 @@ docker run -d --name isir-watch --restart unless-stopped --env-file .env -p 8081
 
 SMTP is required only when sending a digest to configured recipients.
 Add subjects and recipients, run a manual check, and send a test digest.
-Set `ISIR_SCHEDULER_ENABLED=false` to disable scheduling during setup.
+Set `ISIR_SCHEDULER_ENABLED=false` to initialize both schedules as disabled during setup.
+After initialization, enable or disable each schedule in the web interface; the database settings take precedence.
 
 The `.env` file contains credentials and must not be committed to Git.
 Gmail SMTP requires an app password. The web interface has no authentication
@@ -96,24 +99,60 @@ docker compose exec app python -m app.check_all
 docker compose exec app python -m app.mail_digest
 ```
 
-Manual checks do not send a digest. Automatic checks run every Monday at 06:00
-in the `Europe/Prague` time zone. The digest is sent only after all subjects
-have been checked successfully. No systemd timers, cron, or APScheduler are needed.
+Manual checks do not send a digest. The web interface offers separate check and
+email schedules: daily, selected weekdays, or a day of the month, each with its
+own local time and enabled switch. Missing month days (such as February 31) use
+the last day of that month. Defaults are daily checks at 06:00 and Monday email
+at 07:00, in the configured `TZ` (Europe/Prague by default).
 
-The scheduler starts only through `python -m app.run`, using a single process
-and container. Do not run multiple replicas against the same database.
-Starting Uvicorn directly does not start the scheduler.
+The environment variable `ISIR_SCHEDULER_ENABLED` seeds the initial enabled state
+only. Existing saved web settings take precedence. You can enable schedules in
+the web interface even when the deployment YAML still contains `false`.
+The database stores schedules, execution status, and the last attempted slots.
+Saving a schedule starts it from its next occurrence without a retrospective run.
+After a restart, the scheduler catches up with the latest missed occurrence.
 
-On its first start, the scheduler records the latest scheduled time without
-sending a retrospective digest. After subsequent restarts, it catches up with
-the most recent missed Monday run. It records the scheduled run before execution
-to prevent duplicate emails after a crash. Failed runs are not retried
-automatically; use the CLI commands to retry. Python zoneinfo and tzdata handle
-CET/CEST transitions.
+A single scheduler starts through `python -m app.run`; do not run multiple replicas
+against the same database. Direct Uvicorn does not start the scheduler. If both
+jobs are due together, checks finish first. Failed checks in that batch suppress
+the simultaneous email. Independently scheduled email reports stored errors
+explicitly. Failed or interrupted scheduled attempts are not automatically retried;
+use the web buttons or CLI to retry.
 
-If a subject check fails, the batch continues and returns a nonzero exit code;
-the automatic digest is skipped. A manually sent digest explicitly displays
-stored check errors rather than presenting them as zero matches.
+The optional **send only when there are new changes** setting skips scheduled
+email unless active subjects have change events newer than the last successfully
+sent digest. The first complete check establishes a baseline, not a change event.
+A manually sent digest bypasses this option and also advances the delivery marker
+on success. No recipients or an SMTP failure does not advance the marker.
+
+## Change history
+
+Each subject has rolling **7, 30, and 60-day** summaries with dated before/after
+values. The web interface and HTML email use the same history. A change remains
+visible throughout its window, even if an earlier email was missed. All detected
+transitions are retained, including A → B → A.
+
+History tracks new proceedings, proceedings no longer returned by the current
+search, and changes to status, name, identifiers, birth date, and address. A missing
+proceeding is described as absent from current results, not as legally closed.
+The event timestamp is when the application detected the change, not necessarily
+when it happened in the register. The first reliable check is a baseline. Failed
+checks and potentially truncated responses cannot create disappearance events.
+Results without a stable case identifier are excluded from historical comparisons.
+
+Available stored successful responses are backfilled once, in result order, using
+the subject's current identity filter. Previously edited identities cannot be
+reconstructed exactly from old raw responses. Changing an identifier or restoring
+a subject starts a new comparison baseline; recorded events remain intact.
+
+## Trash and recovery
+
+Removing a subject moves it to the trash, retaining its ID, checks, and change
+history. Trashed subjects are excluded from checks and email digests. Restore a
+subject from **Trash** to resume monitoring. The trash never empties automatically.
+Permanent deletion is available only for trashed subjects and requires typing
+`SMAZAT`; it removes the subject and all associated results and change events.
+The trash protects against accidental clicks and does not replace a database backup.
 
 ## Matching behavior
 
@@ -136,6 +175,14 @@ Raw SOAP responses are retained. The web interface and email digest use the
 same filtering function and display the number of filtered matches.
 
 ## Database upgrades
+
+The watch-history upgrade adds soft-delete metadata, comparison snapshots, and
+change-event tables without removing subjects, results, recipients, or settings.
+Before its schema migration, it saves a SQLite backup next to the database as
+`isir-watch.db.pre-watch-v2.db`. Keep the same `/data` mount during deployment.
+Historical responses are backfilled idempotently at startup; a large history may
+make the first start take longer.
+
 
 On startup, existing databases are upgraded automatically by adding the `rc`
 column to `subjects`. Subjects, their IDs, stored results, recipients, and scheduler
@@ -206,7 +253,7 @@ requires access to Justice.cz on port 8443.
 ## Project structure
 
 ```text
-app/          Web application, SOAP client, SQLite repository, scheduler, and CLI
+app/          Web application, SOAP client, SQLite repository, scheduler, change history, and CLI
 app/templates/ Server-rendered web pages and HTML email templates
 app/static/   Web interface styles
 deploy/       TrueNAS Compose YAML

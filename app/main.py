@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from datetime import date
@@ -11,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from . import models
 from .isir import validate_rc
 from .service import views, check_subject, check_lock
+from . import scheduler
 
 log = logging.getLogger(__name__)
 root = Path(__file__).parent
@@ -19,6 +21,7 @@ templates = Jinja2Templates(directory=str(root / 'templates'))
 @asynccontextmanager
 async def lifespan(app):
     models.initialize()
+    scheduler.initialize()
     log.info('ISIR Watch started')
     yield
 
@@ -44,7 +47,10 @@ def redirect():
 
 @app.get('/')
 def index(request: Request):
-    return templates.TemplateResponse(request=request,name='index.html',context=dict(rows=views(),emails=models.emails()))
+    return templates.TemplateResponse(request=request,name='index.html',context=dict(rows=views(),emails=models.emails(),
+        schedules={job:scheduler.get_schedule(job) for job in scheduler.DEFAULTS},
+        statuses={job:models.setting('schedule_status_'+job) for job in scheduler.DEFAULTS},
+        timezone=os.getenv('TZ','Europe/Prague'),trash_count=len(models.subjects(trashed=True))))
 
 @app.get('/health')
 def health():
@@ -116,6 +122,52 @@ def check(subject_id: int):
 def delete(subject_id: int):
     with check_lock:
         models.delete_subject(subject_id)
+    return redirect()
+
+@app.get('/trash')
+def trash(request: Request):
+    return templates.TemplateResponse(request=request,name='trash.html',context=dict(subjects=models.subjects(trashed=True)))
+
+@app.post('/subjects/{subject_id}/restore')
+def restore(subject_id: int):
+    with check_lock:
+        if not models.restore_subject(subject_id):
+            raise HTTPException(404,'Subjekt v koši neexistuje')
+    return RedirectResponse('/trash',status_code=303)
+
+@app.post('/subjects/{subject_id}/purge')
+def purge(subject_id: int, confirmation: str=Form('')):
+    if confirmation != 'SMAZAT':
+        raise HTTPException(400,'Trvalé smazání potvrďte zadáním SMAZAT')
+    with check_lock:
+        if not models.purge_subject(subject_id):
+            raise HTTPException(404,'Subjekt v koši neexistuje')
+    return RedirectResponse('/trash',status_code=303)
+
+@app.post('/schedules/{job}')
+def save_schedule(job: str, enabled: bool=Form(False), frequency: str=Form(...), time: str=Form(...),
+                  weekdays: list[int]=Form([]), month_day: int=Form(1), only_changes: bool=Form(False)):
+    try:
+        scheduler.save_schedule(job,dict(enabled=enabled,frequency=frequency,time=time,
+            weekdays=sorted(set(weekdays)),month_day=month_day,only_changes=only_changes if job=='digest' else False))
+    except ValueError as exc:
+        raise HTTPException(400,str(exc))
+    return redirect()
+
+@app.post('/check-all')
+def manual_check_all():
+    from .service import check_all
+    check_all()
+    return redirect()
+
+@app.post('/digest')
+def manual_digest():
+    from .mail_digest import send_digest
+    try:
+        send_digest()
+    except Exception:
+        log.exception('Manual digest failed')
+        raise HTTPException(502,'Odeslání selhalo; ověřte SMTP konfiguraci a log')
     return redirect()
 
 @app.post('/emails')

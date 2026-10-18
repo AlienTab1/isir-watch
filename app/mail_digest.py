@@ -7,15 +7,21 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from . import models
 from .service import views
+from . import history
 
 templates = Environment(loader=FileSystemLoader(Path(__file__).parent / 'templates'),autoescape=select_autoescape(('html',)))
 log = logging.getLogger(__name__)
 
-def send_digest():
+def send_digest(only_changes=False):
     recipients = [r['address'] for r in models.emails(True)]
     if not recipients:
         log.info('DIGEST: no recipients -> nothing to send')
-        return
+        return False
+    if only_changes and not history.has_new_changes():
+        log.info('DIGEST: no new changes -> nothing to send')
+        return False
+    # Later changes remain eligible for the next digest.
+    change_id = history.watermark()
     message = EmailMessage()
     message['From'] = os.getenv('ISIR_MAIL_FROM') or os.getenv('ISIR_SMTP_USER','')
     if not message['From']:
@@ -28,8 +34,12 @@ def send_digest():
         smtp.starttls(context=ssl.create_default_context())
         if os.getenv('ISIR_SMTP_USER'):
             smtp.login(os.environ['ISIR_SMTP_USER'],os.environ['ISIR_SMTP_PASS'])
-        smtp.send_message(message,to_addrs=recipients)
+        refused = smtp.send_message(message,to_addrs=recipients)
+        if isinstance(refused,dict) and refused:
+            raise RuntimeError('SMTP refused one or more recipients')
+    models.setting('digest_last_change_id',str(max(change_id,int(models.setting('digest_last_change_id') or 0))))
     log.info('DIGEST sent OK recipients=%s',len(recipients))
+    return True
 
 def main():
     logging.basicConfig(level=logging.INFO)

@@ -1,6 +1,8 @@
 <!doctype html><html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ISIR Watch</title><link rel="stylesheet" href="/static/style.css">
 <body><main><header><span class="eyebrow">INSOLVENČNÍ REJSTŘÍK</span><h1>ISIR Watch</h1><p>Přehled sledovaných subjektů a jejich posledních kontrol.</p></header>
+<nav class="actions"><a href="#schedules">Plánování</a><a href="/trash">Koš ({{ trash_count }})</a></nav>
+{% include 'schedules.html' %}
 <section><h2>Přidat subjekt</h2><p>Vyplňte IČO společnosti, rodné číslo fyzické osoby, nebo její příjmení, jméno a datum narození. Při hledání rodným číslem jsou jméno a datum volitelné.</p>
 <form method="post" action="/subjects" class="grid">
 <label>IČO<input name="ic" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" placeholder="12345678"></label>
@@ -12,12 +14,12 @@
 {% for row in rows %}<section><div class="subject-head"><h3>#{{ loop.index }} · {{ row.subject.nazev or row.subject.ic or 'Fyzická osoba' }} {{ row.subject.jmeno }}</h3><small>ID: {{ row.subject.id }}</small></div>
 <p>{% if row.subject.ic %}IČO: {{ row.subject.ic }}{% else %}Rodné číslo: {{ row.subject.rc or '—' }} · Datum narození: {{ row.subject.datum_narozeni or '—' }}{% endif %}</p>
 {% if not row.subject.ic %}<form method="post" action="/subjects/{{ row.subject.id }}/rc" class="actions"><label>Rodné číslo<input name="rc" value="{{ row.subject.rc }}" inputmode="numeric" maxlength="11" pattern="[0-9]{6}/?[0-9]{3,4}"></label><button>Uložit rodné číslo</button></form>{% endif %}
-<div class="actions"><form method="post" action="/subjects/{{ row.subject.id }}/check"><button>Zkontrolovat</button></form><form method="post" action="/subjects/{{ row.subject.id }}/delete"><button class="secondary">Odstranit</button></form></div>
+<div class="actions"><form method="post" action="/subjects/{{ row.subject.id }}/check"><button>Zkontrolovat</button></form><form method="post" action="/subjects/{{ row.subject.id }}/delete"><button class="secondary">Přesunout do koše</button></form></div>
 <p>Poslední kontrola: {{ row.result.checked_at if row.result else 'Zatím neprovedena' }}</p>
 {% if row.result and row.result.error %}<p class="error">Kontrola selhala: {{ row.result.error }}</p>{% elif row.result %}<p><strong>Nálezy: {{ row.count }}</strong></p>{% endif %}
 {% if row.truncated %}<p class="error">Dotaz dosáhl limitu 50 výsledků. Přehled může být neúplný.</p>{% endif %}
-{% include 'hits.html' %}</section>{% else %}<section>Zatím nesledujete žádné subjekty.</section>{% endfor %}
-<section><h2>E-mailový přehled</h2><p>Každé pondělí po kontrole v 06:00. Časová zóna Europe/Prague.</p>
+{% include 'hits.html' %}{% include 'changes.html' %}</section>{% else %}<section>Zatím nesledujete žádné subjekty.</section>{% endfor %}
+<section><h2>Příjemci e-mailového přehledu</h2><p>Termíny odesílání nastavíte v sekci Plánování.</p>
 <form method="post" action="/emails" class="actions"><label>E-mail<input name="address" type="email" required maxlength="254"></label><button>Přidat příjemce</button></form>
 {% for email in emails %}<div class="actions"><span>{{ email.address }}</span><form method="post" action="/emails/{{ email.id }}/delete"><button class="secondary">Odstranit</button></form></div>{% endfor %}</section>
 <footer>ISIR Watch · údaje z Justice.cz</footer></main></body></html>
