@@ -1,7 +1,7 @@
 import json
 import logging
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from pathlib import Path
 from .config import db_path, now
 
@@ -40,7 +40,7 @@ def initialize():
         if 'rc' not in columns:
             backup_path = Path(db_path()).with_name(Path(db_path()).name + '.pre-rc.db')
             if not backup_path.exists():
-                with sqlite3.connect(backup_path) as backup:
+                with closing(sqlite3.connect(backup_path)) as backup:
                     con.backup(backup)
                 logging.getLogger(__name__).info('Database backup created before rc migration')
             con.execute("ALTER TABLE subjects ADD COLUMN rc TEXT NOT NULL DEFAULT ''")
@@ -50,11 +50,20 @@ def initialize():
             # Finish the legacy rc migration before taking a consistent backup.
             con.commit()
             if not backup_path.exists():
-                with sqlite3.connect(backup_path) as backup:
+                with closing(sqlite3.connect(backup_path)) as backup:
                     con.backup(backup)
             con.execute('ALTER TABLE subjects ADD COLUMN deleted_at TEXT')
         if 'watch_epoch' not in columns:
             con.execute("ALTER TABLE subjects ADD COLUMN watch_epoch TEXT NOT NULL DEFAULT ''")
+        if any(field not in columns for field in ('internal_name','note')):
+            con.commit()
+            backup_path = Path(str(db_path()) + '.pre-metadata.db')
+            if not backup_path.exists():
+                with closing(sqlite3.connect(backup_path)) as backup:
+                    con.backup(backup)
+            for field in ('internal_name','note'):
+                if field not in columns:
+                    con.execute(f"ALTER TABLE subjects ADD COLUMN {field} TEXT NOT NULL DEFAULT ''")
         con.executescript('''
         CREATE TABLE IF NOT EXISTS snapshots (
           result_id INTEGER PRIMARY KEY REFERENCES results(id) ON DELETE CASCADE,
@@ -77,10 +86,15 @@ def subjects(trashed=False):
     with connection() as con:
         return [dict(r) for r in con.execute('SELECT * FROM subjects WHERE deleted_at IS ' + ('NOT NULL' if trashed else 'NULL') + ' ORDER BY id')]
 
-def add_subject(ic='', nazev='', jmeno='', datum_narozeni='', rc=''):
+def add_subject(ic='', nazev='', jmeno='', datum_narozeni='', rc='', internal_name='', note=''):
     with connection() as con:
-        return con.execute('INSERT INTO subjects(ic,nazev,jmeno,datum_narozeni,created_at,rc) VALUES(?,?,?,?,?,?)',
-                           (ic,nazev,jmeno,datum_narozeni,now().isoformat(),rc)).lastrowid
+        return con.execute('INSERT INTO subjects(ic,nazev,jmeno,datum_narozeni,created_at,rc,internal_name,note) VALUES(?,?,?,?,?,?,?,?)',
+                           (ic,nazev,jmeno,datum_narozeni,now().isoformat(),rc,internal_name,note)).lastrowid
+
+def update_metadata(subject_id, internal_name, note):
+    with connection() as con:
+        return con.execute('UPDATE subjects SET internal_name=?,note=? WHERE id=? AND deleted_at IS NULL',
+                           (internal_name,note,subject_id)).rowcount
 
 def update_rc(subject_id, rc):
     with connection() as con:

@@ -45,6 +45,13 @@ async def protect_forms(request: Request, call_next):
 def redirect():
     return RedirectResponse('/',status_code=303)
 
+def validate_metadata(internal_name, note):
+    internal_name = internal_name.strip()
+    note = note.replace('\r\n','\n').replace('\r','\n').strip()
+    if len(internal_name)>200 or len(note)>5000:
+        raise HTTPException(400,'Interní název může mít nejvýše 200 znaků a poznámka 5000 znaků')
+    return internal_name,note
+
 @app.get('/')
 def index(request: Request):
     return templates.TemplateResponse(request=request,name='index.html',context=dict(rows=views(),emails=models.emails(),
@@ -59,7 +66,8 @@ def health():
     return {'status':'ok'}
 
 @app.post('/subjects')
-def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_narozeni: str=Form(''),rc: str=Form('')):
+def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_narozeni: str=Form(''),rc: str=Form(''),internal_name: str=Form(''),note: str=Form('')):
+    internal_name,note = validate_metadata(internal_name,note)
     ic,nazev,jmeno,datum_narozeni = (v.strip() for v in (ic,nazev,jmeno,datum_narozeni))
     rc = rc.strip()
     if ic and rc:
@@ -95,7 +103,15 @@ def add_subject(ic: str=Form(''),nazev: str=Form(''),jmeno: str=Form(''),datum_n
             raise HTTPException(400,'Neplatné datum narození')
     with check_lock:
         if not any(all(s[k] == v for k,v in (('ic',ic),('nazev',nazev),('jmeno',jmeno),('datum_narozeni',datum_narozeni),('rc',rc))) for s in models.subjects()):
-            models.add_subject(ic,nazev,jmeno,datum_narozeni,rc)
+            models.add_subject(ic,nazev,jmeno,datum_narozeni,rc,internal_name,note)
+    return redirect()
+
+@app.post('/subjects/{subject_id}/metadata')
+def update_metadata(subject_id: int, internal_name: str=Form(''),note: str=Form('')):
+    internal_name,note = validate_metadata(internal_name,note)
+    with check_lock:
+        if not models.update_metadata(subject_id,internal_name,note):
+            raise HTTPException(404,'Aktivní subjekt neexistuje')
     return redirect()
 
 @app.post('/subjects/{subject_id}/rc')

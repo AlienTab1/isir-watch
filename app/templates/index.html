@@ -9,9 +9,17 @@
 <label>Název / příjmení<input name="nazev" maxlength="200"></label>
 <label>Jméno<input name="jmeno" maxlength="200"></label>
 <label>Rodné číslo<input name="rc" inputmode="numeric" maxlength="11" pattern="[0-9]{6}/?[0-9]{3,4}" placeholder="RRMMDD/XXXX"></label>
-<label>Datum narození<input type="date" name="datum_narozeni"></label><button>Přidat subjekt</button></form></section>
+<label>Datum narození<input type="date" name="datum_narozeni"></label>
+<label>Interní název (volitelné)<input name="internal_name" maxlength="200" placeholder="Vlastní označení subjektu"></label>
+<label>Poznámka (volitelné)<textarea name="note" rows="3" maxlength="5000"></textarea></label>
+<button>Přidat subjekt</button></form></section>
 <h2>Sledované subjekty <span class="badge">{{ rows|length }}</span></h2>
 {% for row in rows %}<section><div class="subject-head"><h3>#{{ loop.index }} · {{ row.subject.nazev or row.subject.ic or 'Fyzická osoba' }} {{ row.subject.jmeno }}</h3><small>ID: {{ row.subject.id }}</small></div>
+{% with subject=row.subject %}{% include 'metadata.html' %}{% endwith %}
+<details><summary>Upravit interní název a poznámku</summary><form method="post" action="/subjects/{{ row.subject.id }}/metadata" class="metadata-form">
+<label>Interní název<input name="internal_name" value="{{ row.subject.internal_name }}" maxlength="200"></label>
+<label>Poznámka<textarea name="note" rows="4" maxlength="5000">{{ row.subject.note }}</textarea></label>
+<small>Tyto údaje se zobrazí i v e-mailu. Neovlivňují hledání v ISIR.</small><button>Uložit název a poznámku</button></form></details>
 <p>{% if row.subject.ic %}IČO: {{ row.subject.ic }}{% else %}Rodné číslo: {{ row.subject.rc or '—' }} · Datum narození: {{ row.subject.datum_narozeni or '—' }}{% endif %}</p>
 {% if not row.subject.ic %}<form method="post" action="/subjects/{{ row.subject.id }}/rc" class="actions"><label>Rodné číslo<input name="rc" value="{{ row.subject.rc }}" inputmode="numeric" maxlength="11" pattern="[0-9]{6}/?[0-9]{3,4}"></label><button>Uložit rodné číslo</button></form>{% endif %}
 <div class="actions"><form method="post" action="/subjects/{{ row.subject.id }}/check"><button>Zkontrolovat</button></form><form method="post" action="/subjects/{{ row.subject.id }}/delete"><button class="secondary">Přesunout do koše</button></form></div>

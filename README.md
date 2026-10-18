@@ -154,6 +154,22 @@ Permanent deletion is available only for trashed subjects and requires typing
 `SMAZAT`; it removes the subject and all associated results and change events.
 The trash protects against accidental clicks and does not replace a database backup.
 
+## Internal subject labels and notes
+
+Each subject has optional **Internal name** (up to 200 characters) and **Note**
+(up to 5,000 characters). Set them when adding a subject or edit them on its card.
+Both fields appear in the web interface and HTML email digest; multiline notes
+retain line breaks. Clearing either field removes its annotation.
+
+These annotations are separate from the name used to query ISIR. They are never
+sent to the SOAP service, do not affect matching, and do not create insolvency
+change events. They are retained when moving a subject to the trash and restoring it.
+
+Existing databases receive both columns automatically, with empty values for
+existing subjects. Before this migration, a SQLite backup is saved next to the
+database as `isir-watch.db.pre-metadata.db`. Subjects, results, history, schedules,
+and recipients are preserved. Keep the same `/data` mount when updating the image.
+
 ## Matching behavior
 
 SOAP searches use broad criteria followed by strict local matching. Names are
