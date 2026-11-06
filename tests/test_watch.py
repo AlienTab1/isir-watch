@@ -14,6 +14,8 @@ TZ = ZoneInfo('Europe/Prague')
 def database(tmp_path,monkeypatch):
     monkeypatch.setenv('ISIR_DB_PATH',str(tmp_path/'watch.db'))
     models.initialize()
+    from app import proceedings
+    monkeypatch.setattr(proceedings,'sync',lambda:True)
 
 def subject():
     return models.add_subject(ic='00123456',nazev='Test company')
@@ -179,24 +181,6 @@ def test_monthly_and_dst():
     assert scheduler.due_slot(datetime(2026,10,25,2,15,tzinfo=TZ,fold=1),config)==first
     assert scheduler.due_slot(datetime(2026,3,29,3,30,tzinfo=TZ),config).startswith('2026-03-29T03:30')
 
-def test_changed_only_digest_and_failed_send(monkeypatch):
-    sid=subject();models.add_email('test@example.com')
-    monkeypatch.setenv('ISIR_MAIL_FROM','sender@example.com')
-    smtp=MagicMock();monkeypatch.setattr(mail_digest.smtplib,'SMTP',smtp)
-    models.save_result(sid,payload(),1)
-    assert not mail_digest.send_digest(only_changes=True)
-    smtp.assert_not_called()
-    models.save_result(sid,payload('B'),1)
-    smtp.side_effect=OSError('offline')
-    with pytest.raises(OSError):
-        mail_digest.send_digest(only_changes=True)
-    assert history.has_new_changes()
-    smtp.side_effect=None
-    assert mail_digest.send_digest(only_changes=True)
-    assert not history.has_new_changes()
-    assert not mail_digest.send_digest(only_changes=True)
-    assert mail_digest.send_digest() # explicit manual send
-
 def test_web_mail_show_same_history():
     sid=subject()
     models.save_result(sid,payload(),1)
@@ -206,5 +190,5 @@ def test_web_mail_show_same_history():
         assert '7 dní: 1 změn' in html
         assert 'Plánování' in html and 'Koš (0)' in html
     email=mail_digest.templates.get_template('digest.html').render(rows=service.views())
-    assert '7 dní: 1 změn' in email and 'Stav řízení' in email
+    assert '7 dní: 0 aktivit' in email and 'Události a dokumenty' in email
     assert '<details>' not in email

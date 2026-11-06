@@ -3,6 +3,7 @@ import logging
 import threading
 from . import models, isir
 from . import history
+from . import proceedings
 
 log = logging.getLogger(__name__)
 check_lock = threading.Lock()
@@ -19,6 +20,7 @@ def check_subject(subject):
         hits = isir.get_hits(payload)
         filtered = isir.filter_hits_strict(hits, subject)
         models.save_result(subject['id'],payload,len(filtered))
+        proceedings.register(subject['id'],filtered)
         log.info('subject=%s raw_hits=%s filtered_hits=%s',subject['id'],len(hits),len(filtered))
         return True
     except Exception as exc:
@@ -26,7 +28,7 @@ def check_subject(subject):
         models.save_result(subject['id'],None,0,f'{type(exc).__name__}: {exc}')
         return False
 
-def views():
+def views(days=7):
     out = []
     for subject in models.subjects():
         result = models.latest(subject['id'])
@@ -36,7 +38,7 @@ def views():
             raw = isir.get_hits(json.loads(result['payload_json']))
             raw_count = len(raw)
             hits = [isir.normalize_hit(h) for h in isir.filter_hits_strict(raw,subject)]
-        out.append(dict(subject=subject,result=result,hits=hits,count=len(hits),truncated=raw_count>=50,changes=history.windows(subject['id'])))
+        out.append(dict(subject=subject,result=result,hits=hits,count=len(hits),truncated=raw_count>=50,changes=history.windows(subject['id']),events=proceedings.overview(subject['id'],days)))
     return out
 
 def check_all():
@@ -48,4 +50,5 @@ def check_all():
             else:
                 errors += 1
     log.info('checked %s subjects successes=%s errors=%s',ok+errors,ok,errors)
-    return 1 if errors else 0
+    synced=proceedings.sync()
+    return 1 if errors or not synced else 0

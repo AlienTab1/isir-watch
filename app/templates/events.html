@@ -1,0 +1,9 @@
+<div class="event-history"><h4>Události a dokumenty ve spisech</h4>
+<p>{% for days,count in row.events.counts.items() %}<span class="badge">{{ days }} dní: {{ count }} aktivit</span> {% endfor %}</p>
+{% for case,sections in row.events.groups.items() %}<h4>{{ case }}</h4>
+{% for section,events in sections.items() %}
+{% if email_mode %}<div><h4>Oddíl {{ section }} · {{ events|length }} aktivit</h4>{% else %}<details open><summary>Oddíl {{ section }} · {{ events|length }} aktivit</summary>{% endif %}
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th align="left">Položka</th><th align="left">Zveřejněno / zjištěno</th><th align="left">Popis</th><th align="left">Dokument</th></tr></thead><tbody>
+{% for event in events %}<tr><td style="padding:8px;vertical-align:top"><strong>{{ event.section }}-{{ event.number }}</strong></td><td style="padding:8px;vertical-align:top">{{ event.published_at or 'Neuvedeno' }}<br><small>Zjištěno: {{ event.detected_at }}</small></td><td style="padding:8px;vertical-align:top">{{ event.description }}<br><small>{{ event.kind }}</small></td><td style="padding:8px;vertical-align:top">{% if event.document_url %}<a href="{{ event.document_url }}" target="_blank" rel="noopener noreferrer">Otevřít dokument ↗</a>{% else %}Bez dokumentu{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% if email_mode %}</div>{% else %}</details>{% endif %}
+{% endfor %}{% else %}<p>Za posledních {{ row.events.days }} dní nebyla zachycena žádná aktivita. Úplnost závisí na začátku a stavu synchronizace.</p>{% endfor %}</div>

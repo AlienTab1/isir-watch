@@ -81,6 +81,8 @@ def initialize():
         ''')
     from .history import backfill
     backfill()
+    from . import proceedings
+    proceedings.initialize()
 
 def subjects(trashed=False):
     with connection() as con:
@@ -110,7 +112,11 @@ def restore_subject(subject_id):
 
 def purge_subject(subject_id):
     with connection() as con:
-        return con.execute('DELETE FROM subjects WHERE id=? AND deleted_at IS NOT NULL',(subject_id,)).rowcount
+        deleted=con.execute('DELETE FROM subjects WHERE id=? AND deleted_at IS NOT NULL',(subject_id,)).rowcount
+        if deleted:
+            con.execute('DELETE FROM proceeding_actions WHERE case_key NOT IN (SELECT case_key FROM proceeding_links)')
+            con.execute('DELETE FROM proceeding_hidden WHERE case_key NOT IN (SELECT case_key FROM proceeding_links)')
+        return deleted
 
 def save_result(subject_id, payload, count, error=None):
     with connection() as con:

@@ -120,30 +120,53 @@ explicitly. Failed or interrupted scheduled attempts are not automatically retri
 use the web buttons or CLI to retry.
 
 The optional **send only when there are new changes** setting skips scheduled
-email unless active subjects have change events newer than the last successfully
-sent digest. The first complete check establishes a baseline, not a change event.
+email unless active subjects have proceeding actions newer than the last successfully
+sent digest. Initial activation starts at the current public feed ID; existing documents are not announced as new.
 A manually sent digest bypasses this option and also advances the delivery marker
 on success. No recipients or an SMTP failure does not advance the marker.
 
-## Change history
+## Proceeding events and documents
 
-Each subject has rolling **7, 30, and 60-day** summaries with dated before/after
-values. The web interface and HTML email use the same history. A change remains
-visible throughout its window, even if an earlier email was missed. All detected
-transitions are retained, including A → B → A.
+The main overview monitors **activity inside proceedings**, rather than changes
+in the number of matching insolvency cases. A summary table shows 7/30/60-day
+activity counts per subject. Select a window and expand the subject to see its
+cases, naturally sorted sections (including C20, P1 and other section names),
+item numbers, publication/detection timestamps, descriptions, and document links.
+The email contains the same counts and a 60-day detailed activity overview.
 
-History tracks new proceedings, proceedings no longer returned by the current
-search, and changes to status, name, identifiers, birth date, and address. A missing
-proceeding is described as absent from current results, not as legally closed.
-The event timestamp is when the application detected the change, not necessarily
-when it happened in the register. The first reliable check is a baseline. Failed
-checks and potentially truncated responses cannot create disappearance events.
-Results without a stable case identifier are excluded from historical comparisons.
+The official ISIR_PUBLIC_WS (WS_1) supplies a global incremental action feed.
+ISIR_CUZK_WS continues to discover cases for monitored subjects. Only actions for
+linked cases are retained. Main records, amendments, secondary documents, legal
+force updates and cancellations are labeled separately. The history is an action
+log, not a reconstruction of the complete current document table. Multiple actions
+may refer to the same section/item; deduplication uses the unique feed action ID.
 
-Available stored successful responses are backfilled once, in result order, using
-the subject's current identity filter. Previously edited identities cannot be
-reconstructed exactly from old raw responses. Changing an identifier or restoring
-a subject starts a new comparison baseline; recorded events remain intact.
+**Coverage starts at activation.** The first event synchronization records the
+latest published feed ID, without replaying the entire national register.
+Existing CUZK responses cannot reconstruct earlier document history. The UI and
+email explicitly show coverage and synchronization status. Newly linked cases are
+tracked from their subscription cursor. No historical backfill is claimed.
+
+Each batch and its continuation cursor are saved in one SQLite transaction.
+Failures retain the previous committed cursor; repeated batches do not duplicate
+actions. Empty successful responses do not advance the cursor across an ID gap.
+The default limit is 200 batches per run; if exhausted, status indicates incomplete
+synchronization and the next check resumes. Use **Synchronize events now** to
+activate monitoring or resume a backlog. Normal scheduled/manual subject checks
+also synchronize events. The independent email schedule remains available.
+
+Optional environment variables:
+
+- `ISIR_PUBLIC_WSDL`: override the official WS_1 WSDL URL.
+- `ISIR_PUBLIC_MAX_BATCHES`: maximum batches processed per synchronization (default 200).
+
+Only-changes email now uses a separate successful-delivery marker for proceeding
+actions; old case-state changes do not trigger it. Windows use detection time and
+also display the original publication time. PDFs are linked, not downloaded or
+compared internally. Existing basic case-state history remains available in a
+collapsed legacy section of the web UI and stays in the database.
+
+Reference: [Official WS_1 documentation](https://isir.justice.cz/isir/help/Popis_WS_1_v2_10.pdf).
 
 ## Trash and recovery
 
@@ -191,6 +214,13 @@ Raw SOAP responses are retained. The web interface and email digest use the
 same filtering function and display the number of filtered matches.
 
 ## Database upgrades
+
+The proceeding-event upgrade adds new tables without rewriting existing subjects,
+results, legacy changes, notes, email recipients or schedules. Before the new tables
+are created, a SQLite backup is saved as `isir-watch.db.pre-proceedings.db`. Keep
+the existing `/data` mount. Production deployment is separate from local testing;
+verify an upgrade on a copy of your production database before rollout.
+
 
 The watch-history upgrade adds soft-delete metadata, comparison snapshots, and
 change-event tables without removing subjects, results, recipients, or settings.

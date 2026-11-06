@@ -13,6 +13,7 @@ from . import models
 from .isir import validate_rc
 from .service import views, check_subject, check_lock
 from . import scheduler
+from . import proceedings
 
 log = logging.getLogger(__name__)
 root = Path(__file__).parent
@@ -53,8 +54,12 @@ def validate_metadata(internal_name, note):
     return internal_name,note
 
 @app.get('/')
-def index(request: Request):
-    return templates.TemplateResponse(request=request,name='index.html',context=dict(rows=views(),emails=models.emails(),
+def index(request: Request, days: int=7):
+    if days not in (7,30,60):
+        raise HTTPException(422,'Období musí být 7, 30 nebo 60 dní')
+    return templates.TemplateResponse(request=request,name='index.html',context=dict(rows=views(days),emails=models.emails(),days=days,
+        feed_status=models.setting('proceedings_status') or 'Sledování dokumentů ještě nebylo aktivováno',
+        feed_since=models.setting('proceedings_since'),feed_checked=models.setting('proceedings_checked_at'),
         schedules={job:scheduler.get_schedule(job) for job in scheduler.DEFAULTS},
         statuses={job:models.setting('schedule_status_'+job) for job in scheduler.DEFAULTS},
         timezone=os.getenv('TZ','Europe/Prague'),trash_count=len(models.subjects(trashed=True))))
@@ -132,6 +137,12 @@ def check(subject_id: int):
         if not subject:
             raise HTTPException(404,'Subjekt neexistuje')
         check_subject(subject)
+    proceedings.sync()
+    return redirect()
+
+@app.post('/events/sync')
+def sync_events():
+    proceedings.sync()
     return redirect()
 
 @app.post('/subjects/{subject_id}/delete')

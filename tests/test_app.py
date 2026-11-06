@@ -10,6 +10,8 @@ from app.main import app
 def database(tmp_path,monkeypatch):
     monkeypatch.setenv('ISIR_DB_PATH',str(tmp_path/'test.db'))
     models.initialize()
+    from app import proceedings
+    monkeypatch.setattr(proceedings,'sync',lambda:True)
 
 def person():
     return dict(ic='',nazev='Bosák',jmeno='Jan',datum_narozeni='1980-01-02')
